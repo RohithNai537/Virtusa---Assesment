@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RetailIQ — SQL Sales Analytics</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  /* ── TOKENS ── */
+  :root {
+    --bg:        #05070f;
+    --surface:   #0c0f1e;
+    --card:      #10142a;
+    --border:    rgba(99,102,241,.18);
+    --accent:    #6366f1;
+    --accent2:   #22d3ee;
+    --accent3:   #f472b6;
+    --accent4:   #fb923c;
+    --text:      #e2e8f0;
+    --muted:     #64748b;
+    --green:     #34d399;
+    --yellow:    #fbbf24;
+    --font-head: 'Syne', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-body: 'Inter', sans-serif;
+    --r:         14px;
+    --r-sm:      8px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--text);font-family:var(--font-body);min-height:100vh;overflow-x:hidden}
+
+  /* ── BACKGROUND GLOW ── */
+  .bg-glow{
+    position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;
+    background:
+      radial-gradient(ellipse 60% 50% at 20% 10%, rgba(99,102,241,.12) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 40% at 80% 80%, rgba(34,211,238,.08) 0%, transparent 70%);
+  }
+
+  /* ── LAYOUT ── */
+  .wrap{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:0 28px}
+
+  /* ── NAV ── */
+  nav{
+    position:sticky;top:0;z-index:100;
+    background:rgba(5,7,15,.85);backdrop-filter:blur(16px);
+    border-bottom:1px solid var(--border);
+    padding:16px 28px;display:flex;align-items:center;gap:12px;
+    animation: slideDown .5s ease;
+  }
+  @keyframes slideDown{from{transform:translateY(-100%);opacity:0}to{transform:translateY(0);opacity:1}}
+  .nav-logo{
+    font-family:var(--font-head);font-size:1.4rem;font-weight:800;letter-spacing:-.03em;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  }
+  .nav-tag{
+    font-family:var(--font-mono);font-size:.65rem;color:var(--accent);
+    border:1px solid var(--accent);padding:2px 8px;border-radius:4px;letter-spacing:.05em;
+  }
+  .nav-links{margin-left:auto;display:flex;gap:24px}
+  .nav-links a{color:var(--muted);text-decoration:none;font-size:.875rem;font-weight:500;transition:color .2s}
+  .nav-links a:hover{color:var(--text)}
+  #db-status{
+    font-family:var(--font-mono);font-size:.7rem;padding:4px 12px;border-radius:20px;
+    background:rgba(52,211,153,.1);color:var(--green);border:1px solid rgba(52,211,153,.3);
+    display:flex;align-items:center;gap:6px;
+  }
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.7)}}
+
+  /* ── HERO ── */
+  .hero{padding:80px 0 60px;text-align:center;animation:fadeUp .7s ease}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+  .hero-badge{
+    display:inline-block;font-family:var(--font-mono);font-size:.7rem;letter-spacing:.1em;
+    color:var(--accent2);border:1px solid rgba(34,211,238,.3);padding:5px 16px;border-radius:20px;
+    background:rgba(34,211,238,.06);margin-bottom:24px;text-transform:uppercase;
+  }
+  .hero h1{
+    font-family:var(--font-head);font-size:clamp(2.5rem,6vw,4.5rem);font-weight:800;
+    line-height:1.05;letter-spacing:-.04em;margin-bottom:20px;
+  }
+  .hero h1 span{
+    background:linear-gradient(135deg,var(--accent) 0%,var(--accent2) 50%,var(--accent3) 100%);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  }
+  .hero p{color:var(--muted);font-size:1.1rem;max-width:580px;margin:0 auto 40px;line-height:1.7}
+  .hero-actions{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+  .btn{
+    font-family:var(--font-head);font-size:.875rem;font-weight:700;letter-spacing:.01em;
+    padding:12px 28px;border-radius:var(--r-sm);border:none;cursor:pointer;transition:all .2s;text-decoration:none;display:inline-flex;align-items:center;gap:8px;
+  }
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-primary:hover{background:#4f46e5;transform:translateY(-2px);box-shadow:0 8px 24px rgba(99,102,241,.4)}
+  .btn-ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
+  .btn-ghost:hover{background:var(--card);border-color:var(--accent);transform:translateY(-2px)}
+
+  /* ── STATS ROW ── */
+  .stats-row{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;
+    margin-bottom:48px;
+  }
+  .stat-card{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--r);
+    padding:24px;text-align:center;
+    animation:fadeUp .6s ease both;
+    transition:border-color .2s,transform .2s;
+  }
+  .stat-card:hover{border-color:var(--accent);transform:translateY(-3px)}
+  .stat-card:nth-child(1){animation-delay:.1s}
+  .stat-card:nth-child(2){animation-delay:.15s}
+  .stat-card:nth-child(3){animation-delay:.2s}
+  .stat-card:nth-child(4){animation-delay:.25s}
+  .stat-card:nth-child(5){animation-delay:.3s}
+  .stat-value{font-family:var(--font-head);font-size:1.9rem;font-weight:800;letter-spacing:-.03em}
+  .stat-label{font-size:.75rem;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.06em}
+  .c-indigo{color:var(--accent)}
+  .c-cyan{color:var(--accent2)}
+  .c-pink{color:var(--accent3)}
+  .c-orange{color:var(--accent4)}
+  .c-green{color:var(--green)}
+
+  /* ── SECTION HEADER ── */
+  .section-header{
+    display:flex;align-items:center;gap:14px;margin-bottom:24px;
+    animation:fadeUp .6s ease both;
+  }
+  .section-num{
+    font-family:var(--font-mono);font-size:.75rem;color:var(--accent);
+    border:1px solid var(--border);padding:4px 10px;border-radius:var(--r-sm);
+  }
+  .section-header h2{font-family:var(--font-head);font-size:1.5rem;font-weight:700;letter-spacing:-.02em}
+  .section-header p{color:var(--muted);font-size:.875rem;margin-left:auto}
+
+  /* ── CARD ── */
+  .card{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--r);
+    padding:28px;margin-bottom:28px;
+    animation:fadeUp .6s ease both;
+    transition:border-color .2s;
+  }
+  .card:hover{border-color:rgba(99,102,241,.35)}
+  .card-title{
+    font-family:var(--font-head);font-size:1rem;font-weight:700;
+    margin-bottom:4px;display:flex;align-items:center;gap:8px;
+  }
+  .card-sub{color:var(--muted);font-size:.8rem;margin-bottom:20px}
+
+  /* ── CHARTS GRID ── */
+  .charts-2{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:28px}
+  .charts-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-bottom:28px}
+  @media(max-width:900px){.charts-2,.charts-3{grid-template-columns:1fr}}
+  .chart-wrap{position:relative;height:280px}
+
+  /* ── TABLE ── */
+  .tbl-wrap{overflow-x:auto;border-radius:var(--r-sm)}
+  table{width:100%;border-collapse:collapse;font-size:.825rem}
+  thead th{
+    font-family:var(--font-mono);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--muted);padding:10px 14px;border-bottom:1px solid var(--border);text-align:left;
+    background:rgba(255,255,255,.02);white-space:nowrap;
+  }
+  tbody tr{border-bottom:1px solid rgba(255,255,255,.04);transition:background .15s}
+  tbody tr:hover{background:rgba(99,102,241,.07)}
+  tbody td{padding:11px 14px;vertical-align:middle}
+  .rank{
+    font-family:var(--font-mono);font-size:.7rem;color:var(--muted);
+    width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;
+    background:rgba(255,255,255,.05);border-radius:6px;
+  }
+  .rank.top{background:rgba(99,102,241,.2);color:var(--accent)}
+  .badge{
+    font-family:var(--font-mono);font-size:.67rem;padding:3px 8px;border-radius:20px;
+    white-space:nowrap;letter-spacing:.02em;
+  }
+  .badge-electronics{background:rgba(99,102,241,.15);color:var(--accent)}
+  .badge-clothing   {background:rgba(244,114,182,.15);color:var(--accent3)}
+  .badge-footwear   {background:rgba(251,146,60,.15);color:var(--accent4)}
+  .badge-books      {background:rgba(34,211,238,.15);color:var(--accent2)}
+  .badge-home       {background:rgba(52,211,153,.15);color:var(--green)}
+  .badge-furniture  {background:rgba(251,191,36,.15);color:var(--yellow)}
+  .badge-health     {background:rgba(52,211,153,.15);color:var(--green)}
+  .badge-beauty     {background:rgba(244,114,182,.15);color:var(--accent3)}
+  .bar-mini{
+    height:6px;border-radius:3px;
+    background:linear-gradient(90deg,var(--accent),var(--accent2));
+    margin-top:4px;transition:width .8s ease;
+  }
+  .money{font-family:var(--font-mono);font-size:.8rem}
+
+  /* ── SQL EXPLORER ── */
+  #explorer{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:40px}
+  .explorer-top{
+    padding:16px 24px;border-bottom:1px solid var(--border);
+    display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.02);
+  }
+  .explorer-top h3{font-family:var(--font-head);font-size:1rem;font-weight:700}
+  .query-select{
+    margin-left:auto;background:var(--card);color:var(--text);border:1px solid var(--border);
+    border-radius:var(--r-sm);padding:7px 12px;font-family:var(--font-mono);font-size:.75rem;
+    cursor:pointer;min-width:240px;
+  }
+  .query-select:focus{outline:none;border-color:var(--accent)}
+  .run-btn{
+    background:var(--accent);color:#fff;border:none;border-radius:var(--r-sm);
+    padding:8px 20px;font-family:var(--font-head);font-size:.8rem;font-weight:700;
+    cursor:pointer;transition:background .2s;white-space:nowrap;
+  }
+  .run-btn:hover{background:#4f46e5}
+  .code-area{
+    background:#07091a;padding:20px 24px;border-bottom:1px solid var(--border);
+    font-family:var(--font-mono);font-size:.8rem;line-height:1.7;color:#a5b4fc;
+    min-height:130px;max-height:200px;overflow-y:auto;white-space:pre;
+  }
+  .kw{color:#c084fc} .fn{color:var(--accent2)} .cm{color:#374151} .str{color:var(--green)}
+  #result-area{padding:0}
+  #result-area table{font-size:.78rem}
+  .result-meta{
+    padding:12px 24px;border-top:1px solid var(--border);
+    font-family:var(--font-mono);font-size:.7rem;color:var(--muted);
+    background:rgba(255,255,255,.01);
+  }
+
+  /* ── SCHEMA CARDS ── */
+  .schema-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:40px}
+  .schema-table{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;
+    transition:border-color .2s,transform .2s;
+    animation:fadeUp .6s ease both;
+  }
+  .schema-table:hover{border-color:var(--accent);transform:translateY(-4px)}
+  .schema-thead{
+    padding:14px 18px;border-bottom:1px solid var(--border);
+    display:flex;align-items:center;gap:8px;
+    background:linear-gradient(135deg,rgba(99,102,241,.15),transparent);
+  }
+  .schema-icon{font-size:1.2rem}
+  .schema-name{font-family:var(--font-head);font-size:.95rem;font-weight:700}
+  .schema-tbody{padding:14px 18px}
+  .schema-field{
+    font-family:var(--font-mono);font-size:.72rem;padding:6px 0;
+    border-bottom:1px solid rgba(255,255,255,.04);display:flex;gap:6px;align-items:center;
+  }
+  .schema-field:last-child{border-bottom:none}
+  .pk{color:var(--yellow);font-size:.65rem;border:1px solid rgba(251,191,36,.3);padding:1px 5px;border-radius:3px}
+  .fk{color:var(--accent2);font-size:.65rem;border:1px solid rgba(34,211,238,.3);padding:1px 5px;border-radius:3px}
+  .type{color:var(--muted);margin-left:auto}
+
+  /* ── FOOTER ── */
+  footer{
+    border-top:1px solid var(--border);padding:32px 28px;text-align:center;
+    font-family:var(--font-mono);font-size:.75rem;color:var(--muted);
+    display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;
+  }
+  .footer-logo{font-family:var(--font-head);font-weight:800;font-size:1rem;color:var(--text)}
+
+  /* ── LOADER ── */
+  #loader{
+    position:fixed;inset:0;background:var(--bg);z-index:999;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;
+    transition:opacity .5s;
+  }
+  .loader-logo{font-family:var(--font-head);font-size:2rem;font-weight:800;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .loader-bar{width:220px;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+  .loader-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0;transition:width .1s}
+  .loader-text{font-family:var(--font-mono);font-size:.75rem;color:var(--muted)}
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-track{background:var(--bg)}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+</style>
+</head>
+<body>
+
+<!-- LOADER -->
+<div id="loader">
+  <div class="loader-logo">RetailIQ</div>
+  <div class="loader-bar"><div class="loader-fill" id="lf"></div></div>
+  <div class="loader-text" id="lt">Initialising SQLite engine…</div>
+</div>
+
+<div class="bg-glow"></div>
+
+<!-- NAV -->
+<nav>
+  <span class="nav-logo">RetailIQ</span>
+  <span class="nav-tag">SQL Project</span>
+  <div class="nav-links">
+    <a href="#dashboard">Dashboard</a>
+    <a href="#explorer">SQL Explorer</a>
+    <a href="#schema">Schema</a>
+  </div>
+  <div id="db-status"><span class="dot"></span>DB Live</div>
+</nav>
+
+<!-- HERO -->
+<div class="wrap">
+  <div class="hero">
+    <div class="hero-badge">🛒 Online Retail Sales Analysis</div>
+    <h1>Unlock Sales Insights<br><span>With Pure SQL</span></h1>
+    <p>A fully in-browser SQLite database — 20 customers, 25 products, 50 orders — analysed with 7 business-intelligence queries.</p>
+    <div class="hero-actions">
+      <a href="#dashboard" class="btn btn-primary">📊 View Dashboard</a>
+      <a href="#explorer" class="btn btn-ghost">⌨️ Run SQL Queries</a>
+    </div>
+  </div>
+
+  <!-- STATS ROW -->
+  <div class="stats-row" id="statsRow">
+    <div class="stat-card"><div class="stat-value c-indigo" id="s-customers">—</div><div class="stat-label">Customers</div></div>
+    <div class="stat-card"><div class="stat-value c-cyan"   id="s-products">—</div><div class="stat-label">Products</div></div>
+    <div class="stat-card"><div class="stat-value c-pink"   id="s-orders">—</div><div class="stat-label">Orders</div></div>
+    <div class="stat-card"><div class="stat-value c-orange" id="s-items">—</div><div class="stat-label">Order Items</div></div>
+    <div class="stat-card"><div class="stat-value c-green"  id="s-revenue">—</div><div class="stat-label">Total Revenue</div></div>
+  </div>
+
+  <!-- ── DASHBOARD ── -->
+  <div id="dashboard">
+
+    <!-- CHARTS ROW 1 -->
+    <div class="section-header">
+      <span class="section-num">01</span>
+      <h2>Revenue Overview</h2>
+      <p>Monthly & Category Breakdown</p>
+    </div>
+    <div class="charts-2">
+      <div class="card">
+        <div class="card-title">📈 Monthly Revenue Trend</div>
+        <div class="card-sub">Total revenue earned per month (2023–2024)</div>
+        <div class="chart-wrap"><canvas id="chartMonthly"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">🍩 Category Revenue Share</div>
+        <div class="card-sub">Revenue contribution by product category</div>
+        <div class="chart-wrap"><canvas id="chartCategory"></canvas></div>
+      </div>
+    </div>
+
+    <!-- TOP PRODUCTS TABLE -->
+    <div class="section-header" style="animation-delay:.1s">
+      <span class="section-num">02</span>
+      <h2>Top-Selling Products</h2>
+      <p>Ranked by units sold</p>
+    </div>
+    <div class="card" id="topProductsCard">
+      <div class="card-title">🏆 Top 10 Products by Volume</div>
+      <div class="card-sub">Products with highest total units sold across all orders</div>
+      <div class="tbl-wrap" id="topProductsTable"></div>
+    </div>
+
+    <!-- VALUABLE CUSTOMERS + CITY BAR -->
+    <div class="section-header" style="animation-delay:.15s">
+      <span class="section-num">03</span>
+      <h2>Customer Intelligence</h2>
+      <p>Spend & Activity Analysis</p>
+    </div>
+    <div class="charts-2">
+      <div class="card">
+        <div class="card-title">💎 Most Valuable Customers</div>
+        <div class="card-sub">Top 10 by total lifetime spend</div>
+        <div class="tbl-wrap" id="topCustomersTable"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">🏙️ Avg Order Value by City</div>
+        <div class="card-sub">Average order value across cities</div>
+        <div class="chart-wrap"><canvas id="chartCity"></canvas></div>
+      </div>
+    </div>
+
+    <!-- INACTIVE -->
+    <div class="section-header" style="animation-delay:.2s">
+      <span class="section-num">04</span>
+      <h2>Inactive Customers</h2>
+      <p>No orders in last 180 days</p>
+    </div>
+    <div class="card">
+      <div class="card-title">⚠️ Customers Requiring Re-engagement</div>
+      <div class="card-sub">Last order was over 180 days before 2025-01-01 — target for win-back campaigns</div>
+      <div class="tbl-wrap" id="inactiveTable"></div>
+    </div>
+
+    <!-- CATEGORY ANALYSIS -->
+    <div class="section-header" style="animation-delay:.25s">
+      <span class="section-num">05</span>
+      <h2>Category Analysis</h2>
+      <p>Units sold and revenue share</p>
+    </div>
+    <div class="card">
+      <div class="card-title">📦 Category-Wise Performance</div>
+      <div class="card-sub">Revenue, units sold and share per product category</div>
+      <div class="tbl-wrap" id="categoryTable"></div>
+    </div>
+
+  </div><!-- /dashboard -->
+
+  <!-- ── SQL EXPLORER ── -->
+  <div class="section-header" id="explorer-header" style="margin-top:40px">
+    <span class="section-num">06</span>
+    <h2>Interactive SQL Explorer</h2>
+    <p>Run queries against the live database</p>
+  </div>
+
+  <div id="explorer">
+    <div class="explorer-top">
+      <h3>⌨️ Query Runner</h3>
+      <select class="query-select" id="querySelect" onchange="loadQuery()">
+        <option value="top_products">Q1 — Top Selling Products</option>
+        <option value="top_customers">Q2 — Most Valuable Customers</option>
+        <option value="monthly">Q3 — Monthly Revenue</option>
+        <option value="category">Q4 — Category Sales Analysis</option>
+        <option value="inactive">Q5 — Inactive Customers</option>
+        <option value="city">Q6 — Avg Order Value by City</option>
+        <option value="never_ordered">Q7 — Products Never Ordered</option>
+        <option value="custom">Custom Query…</option>
+      </select>
+      <button class="run-btn" onclick="runQuery()">▶ Run</button>
+    </div>
+    <div class="code-area" id="codeArea" contenteditable="true" spellcheck="false"></div>
+    <div id="result-area"></div>
+    <div class="result-meta" id="resultMeta">Select a query and click Run</div>
+  </div>
+
+  <!-- ── SCHEMA ── -->
+  <div class="section-header" id="schema">
+    <span class="section-num">07</span>
+    <h2>Database Schema</h2>
+    <p>Relational table structure</p>
+  </div>
+  <div class="schema-grid">
+    <div class="schema-table">
+      <div class="schema-thead"><span class="schema-icon">👤</span><span class="schema-name">Customers</span></div>
+      <div class="schema-tbody">
+        <div class="schema-field"><code>customer_id</code><span class="pk">PK</span><span class="type">INTEGER</span></div>
+        <div class="schema-field"><code>name</code><span class="type">TEXT</span></div>
+        <div class="schema-field"><code>city</code><span class="type">TEXT</span></div>
+      </div>
+    </div>
+    <div class="schema-table">
+      <div class="schema-thead"><span class="schema-icon">📦</span><span class="schema-name">Products</span></div>
+      <div class="schema-tbody">
+        <div class="schema-field"><code>product_id</code><span class="pk">PK</span><span class="type">INTEGER</span></div>
+        <div class="schema-field"><code>name</code><span class="type">TEXT</span></div>
+        <div class="schema-field"><code>category</code><span class="type">TEXT</span></div>
+        <div class="schema-field"><code>price</code><span class="type">REAL</span></div>
+      </div>
+    </div>
+    <div class="schema-table">
+      <div class="schema-thead"><span class="schema-icon">🛒</span><span class="schema-name">Orders</span></div>
+      <div class="schema-tbody">
+        <div class="schema-field"><code>order_id</code><span class="pk">PK</span><span class="type">INTEGER</span></div>
+        <div class="schema-field"><code>customer_id</code><span class="fk">FK</span><span class="type">INTEGER</span></div>
+        <div class="schema-field"><code>date</code><span class="type">TEXT</span></div>
+      </div>
+    </div>
+    <div class="schema-table">
+      <div class="schema-thead"><span class="schema-icon">🔗</span><span class="schema-name">Order_Items</span></div>
+      <div class="schema-tbody">
+        <div class="schema-field"><code>order_id</code><span class="pk">PK</span><span class="fk">FK</span><span class="type">INTEGER</span></div>
+        <div class="schema-field"><code>product_id</code><span class="pk">PK</span><span class="fk">FK</span><span class="type">INTEGER</span></div>
+        <div class="schema-field"><code>quantity</code><span class="type">INTEGER</span></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /wrap -->
+
+<footer>
+  <span class="footer-logo">RetailIQ</span>
+  <span>|</span>
+  <span>SQL Online Retail Sales Analysis Project</span>
+  <span>|</span>
+  <span>SQLite (sql.js) · Chart.js · Vanilla JS</span>
+  <span>|</span>
+  <span>4 Tables · 7 Queries · 50 Orders</span>
+</footer>
+
+<!-- ════════════════════════════════ SCRIPTS ════════════════════════════════ -->
+<script>
+// ── DATA ─────────────────────────────────────────────────
+const SCHEMA_SQL = `
+DROP TABLE IF EXISTS Order_Items;
+DROP TABLE IF EXISTS Orders;
+DROP TABLE IF EXISTS Products;
+DROP TABLE IF EXISTS Customers;
+
+CREATE TABLE Customers (
+  customer_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL, city TEXT NOT NULL
+);
+CREATE TABLE Products (
+  product_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL, category TEXT NOT NULL, price REAL NOT NULL
+);
+CREATE TABLE Orders (
+  order_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id INTEGER NOT NULL, date TEXT NOT NULL,
+  FOREIGN KEY(customer_id) REFERENCES Customers(customer_id)
+);
+CREATE TABLE Order_Items (
+  order_id INTEGER NOT NULL, product_id INTEGER NOT NULL, quantity INTEGER NOT NULL,
+  PRIMARY KEY(order_id, product_id),
+  FOREIGN KEY(order_id)   REFERENCES Orders(order_id),
+  FOREIGN KEY(product_id) REFERENCES Products(product_id)
+);`;
+
+const SEED_SQL = `
+INSERT INTO Customers(name,city) VALUES
+('Aarav Sharma','Mumbai'),('Priya Nair','Chennai'),('Rohan Mehta','Delhi'),
+('Sneha Reddy','Hyderabad'),('Vikram Singh','Bengaluru'),('Ananya Iyer','Pune'),
+('Karthik Pillai','Kochi'),('Divya Patel','Ahmedabad'),('Arjun Bose','Kolkata'),
+('Meera Joshi','Jaipur'),('Nikhil Gupta','Lucknow'),('Pooja Verma','Bhopal'),
+('Rahul Das','Patna'),('Sanya Kapoor','Chandigarh'),('Tarun Malhotra','Noida'),
+('Usha Krishnan','Coimbatore'),('Vivek Agarwal','Surat'),('Wanjiru Kamau','Delhi'),
+('Yashika Tiwari','Nagpur'),('Zara Hussain','Hyderabad');
+
+INSERT INTO Products(name,category,price) VALUES
+('iPhone 15 Pro','Electronics',129999),('Samsung Galaxy S24','Electronics',89999),
+('Sony WH-1000XM5','Electronics',29999),('Dell XPS 15 Laptop','Electronics',149999),
+('iPad Air 5','Electronics',74999),("Levi's 511 Jeans",'Clothing',3499),
+('Nike Air Max 270','Footwear',9499),('Adidas Ultraboost 22','Footwear',12999),
+('Zara Floral Dress','Clothing',4999),('Allen Solly Shirt','Clothing',2299),
+('The Alchemist','Books',499),('Atomic Habits','Books',699),
+('Rich Dad Poor Dad','Books',399),('Prestige Iron','Home Appliances',2999),
+('Philips Air Fryer','Home Appliances',8499),('Dyson V12 Vacuum','Home Appliances',49999),
+('IKEA Study Desk','Furniture',12999),('Wooden Bookshelf','Furniture',7499),
+('Ergonomic Chair','Furniture',18999),('Whey Protein 2kg','Health & Fitness',2999),
+('Yoga Mat Premium','Health & Fitness',1499),('Resistance Bands Set','Health & Fitness',799),
+('Face Serum SPF50','Beauty',1299),('Hair Dryer Pro','Beauty',3499),
+('Perfume EDP 100ml','Beauty',4999);
+
+INSERT INTO Orders(customer_id,date) VALUES
+(1,'2023-01-15'),(3,'2023-01-22'),(5,'2023-02-05'),(2,'2023-02-18'),(7,'2023-03-01'),
+(9,'2023-03-14'),(4,'2023-04-02'),(6,'2023-04-19'),(8,'2023-05-07'),(10,'2023-05-23'),
+(1,'2023-06-10'),(11,'2023-06-28'),(12,'2023-07-04'),(13,'2023-07-19'),(14,'2023-08-01'),
+(15,'2023-08-15'),(16,'2023-09-03'),(17,'2023-09-20'),(18,'2023-10-07'),(19,'2023-10-25'),
+(20,'2023-11-11'),(2,'2023-11-28'),(3,'2023-12-05'),(4,'2023-12-20'),(5,'2024-01-08'),
+(6,'2024-01-25'),(7,'2024-02-10'),(8,'2024-02-27'),(9,'2024-03-15'),(10,'2024-03-30'),
+(1,'2024-04-12'),(11,'2024-04-28'),(12,'2024-05-09'),(13,'2024-05-24'),(14,'2024-06-06'),
+(15,'2024-06-21'),(16,'2024-07-03'),(17,'2024-07-18'),(18,'2024-08-01'),(19,'2024-08-16'),
+(20,'2024-09-02'),(1,'2024-09-17'),(2,'2024-10-05'),(3,'2024-10-20'),(4,'2024-11-07'),
+(5,'2024-11-22'),(6,'2024-12-03'),(7,'2024-12-18'),(8,'2024-12-28'),(9,'2024-12-30');
+
+INSERT INTO Order_Items(order_id,product_id,quantity) VALUES
+(1,1,1),(1,11,2),(2,4,1),(2,20,1),(3,7,2),(3,10,1),(4,2,1),(4,23,2),
+(5,15,1),(5,21,3),(6,6,2),(6,12,1),(7,19,1),(7,22,2),(8,3,1),(8,25,1),
+(9,8,1),(9,20,2),(10,16,1),(10,13,3),(11,5,1),(11,11,1),(12,14,2),(12,21,1),
+(13,9,2),(13,24,1),(14,17,1),(14,12,2),(15,1,1),(15,22,4),(16,4,1),(16,23,1),
+(17,7,1),(17,20,2),(18,2,1),(18,11,1),(19,18,1),(19,25,2),(20,6,3),(20,14,1),
+(21,3,1),(21,12,2),(22,5,1),(22,21,1),(23,15,1),(23,22,3),(24,8,2),(24,13,1),
+(25,1,2),(25,11,1),(26,19,1),(26,20,1),(27,4,1),(27,25,1),(28,9,1),(28,23,2),
+(29,2,1),(29,21,2),(30,16,1),(30,12,1),(31,7,2),(31,22,1),(32,14,1),(32,20,3),
+(33,5,1),(33,11,2),(34,3,1),(34,24,1),(35,17,2),(35,13,1),(36,1,1),(36,21,2),
+(37,6,2),(37,25,1),(38,15,1),(38,22,1),(39,8,1),(39,20,2),(40,4,1),(40,12,3),
+(41,2,1),(41,23,1),(42,19,1),(42,11,1),(43,3,2),(43,21,2),(44,7,1),(44,25,2),
+(45,5,1),(45,22,1),(46,16,1),(46,13,2),(47,9,1),(47,20,3),(48,1,1),(48,24,1),
+(49,4,2),(49,11,1),(50,8,1),(50,21,2);`;
+
+// ── QUERIES ───────────────────────────────────────────────
+const QUERIES = {
+  top_products:`SELECT p.product_id, p.name AS product_name, p.category,
+  p.price, SUM(oi.quantity) AS total_units_sold,
+  SUM(oi.quantity * p.price) AS total_revenue
+FROM Order_Items oi
+JOIN Products p ON p.product_id = oi.product_id
+GROUP BY p.product_id
+ORDER BY total_units_sold DESC
+LIMIT 10;`,
+
+  top_customers:`SELECT c.customer_id, c.name AS customer_name, c.city,
+  COUNT(DISTINCT o.order_id) AS total_orders,
+  SUM(oi.quantity * p.price) AS total_spent
+FROM Customers c
+JOIN Orders o ON o.customer_id = c.customer_id
+JOIN Order_Items oi ON oi.order_id = o.order_id
+JOIN Products p ON p.product_id = oi.product_id
+GROUP BY c.customer_id
+ORDER BY total_spent DESC
+LIMIT 10;`,
+
+  monthly:`SELECT strftime('%Y-%m', o.date) AS year_month,
+  COUNT(DISTINCT o.order_id) AS orders_placed,
+  SUM(oi.quantity * p.price) AS monthly_revenue
+FROM Orders o
+JOIN Order_Items oi ON oi.order_id = o.order_id
+JOIN Products p ON p.product_id = oi.product_id
+GROUP BY year_month
+ORDER BY year_month;`,
+
+  category:`SELECT p.category,
+  COUNT(DISTINCT p.product_id) AS products_in_category,
+  SUM(oi.quantity) AS units_sold,
+  SUM(oi.quantity * p.price) AS category_revenue,
+  ROUND(100.0 * SUM(oi.quantity * p.price) /
+    SUM(SUM(oi.quantity * p.price)) OVER (), 2) AS revenue_share_pct
+FROM Order_Items oi
+JOIN Products p ON p.product_id = oi.product_id
+GROUP BY p.category
+ORDER BY category_revenue DESC;`,
+
+  inactive:`SELECT c.customer_id, c.name, c.city,
+  MAX(o.date) AS last_order_date,
+  CAST(julianday('2025-01-01') - julianday(MAX(o.date)) AS INTEGER) AS days_since_last_order
+FROM Customers c
+JOIN Orders o ON o.customer_id = c.customer_id
+GROUP BY c.customer_id
+HAVING days_since_last_order > 180
+ORDER BY days_since_last_order DESC;`,
+
+  city:`SELECT c.city,
+  COUNT(DISTINCT o.order_id) AS total_orders,
+  ROUND(AVG(ot.order_value),2) AS avg_order_value
+FROM Customers c
+JOIN Orders o ON o.customer_id = c.customer_id
+JOIN (SELECT oi.order_id, SUM(oi.quantity * p.price) AS order_value
+      FROM Order_Items oi JOIN Products p ON p.product_id = oi.product_id
+      GROUP BY oi.order_id) ot ON ot.order_id = o.order_id
+GROUP BY c.city
+ORDER BY avg_order_value DESC;`,
+
+  never_ordered:`SELECT p.product_id, p.name AS product_name, p.category, p.price
+FROM Products p
+WHERE p.product_id NOT IN (SELECT DISTINCT product_id FROM Order_Items)
+ORDER BY p.category, p.name;`,
+
+  custom:`-- Write your own SQL query here!
+SELECT * FROM Customers LIMIT 5;`
+};
+
+// ── COLOUR HELPERS ────────────────────────────────────────
+const CAT_COLORS = {
+  'Electronics':'#6366f1','Clothing':'#f472b6','Footwear':'#fb923c',
+  'Books':'#22d3ee','Home Appliances':'#34d399','Furniture':'#fbbf24',
+  'Health & Fitness':'#a78bfa','Beauty':'#f9a8d4'
+};
+function catBadge(cat){
+  const key = cat.toLowerCase().replace(/ /g,'').replace('&','');
+  const cls = {electronics:'badge-electronics',clothing:'badge-clothing',
+    footwear:'badge-footwear',books:'badge-books',homeappliances:'badge-home',
+    furniture:'badge-furniture',healthfitness:'badge-health',beauty:'badge-beauty'}[key]||'';
+  return `<span class="badge ${cls}">${cat}</span>`;
+}
+function fmt(n){return '₹'+(+n).toLocaleString('en-IN')}
+
+// ── SQL.JS INIT ────────────────────────────────────────────
+let db;
+async function initDB(){
+  setLoader('Fetching sql.js WASM…', 20);
+  const SQL = await initSqlJs({locateFile:f=>`https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}`});
+  setLoader('Creating database schema…', 50);
+  db = new SQL.Database();
+  db.run(SCHEMA_SQL);
+  setLoader('Seeding sample data…', 75);
+  db.run(SEED_SQL);
+  setLoader('Rendering analytics…', 90);
+  await new Promise(r=>setTimeout(r,200));
+  renderAll();
+  setLoader('Done!', 100);
+  await new Promise(r=>setTimeout(r,300));
+  document.getElementById('loader').style.opacity='0';
+  setTimeout(()=>{document.getElementById('loader').style.display='none'},500);
+}
+
+function setLoader(msg, pct){
+  document.getElementById('lt').textContent = msg;
+  document.getElementById('lf').style.width = pct+'%';
+}
+
+function query(sql){
+  const res = db.exec(sql);
+  if(!res.length) return {cols:[], rows:[]};
+  return {cols: res[0].columns, rows: res[0].values};
+}
+
+// ── RENDER ALL ────────────────────────────────────────────
+function renderAll(){
+  renderStats();
+  renderTopProducts();
+  renderTopCustomers();
+  renderInactive();
+  renderCategory();
+  renderChartMonthly();
+  renderChartCategory();
+  renderChartCity();
+  loadQuery();
+}
+
+function renderStats(){
+  const r = v => v.rows[0][0];
+  document.getElementById('s-customers').textContent = r(query('SELECT COUNT(*) FROM Customers'));
+  document.getElementById('s-products').textContent  = r(query('SELECT COUNT(*) FROM Products'));
+  document.getElementById('s-orders').textContent    = r(query('SELECT COUNT(*) FROM Orders'));
+  document.getElementById('s-items').textContent     = r(query('SELECT COUNT(*) FROM Order_Items'));
+  const rev = r(query('SELECT SUM(oi.quantity*p.price) FROM Order_Items oi JOIN Products p ON p.product_id=oi.product_id'));
+  document.getElementById('s-revenue').textContent   = '₹'+Number(rev/100000).toFixed(1)+'L';
+}
+
+function renderTopProducts(){
+  const {cols,rows} = query(QUERIES.top_products);
+  const maxUnits = Math.max(...rows.map(r=>r[4]));
+  let html = `<table><thead><tr>
+    <th>#</th><th>Product</th><th>Category</th><th>Price</th><th>Units Sold</th><th>Revenue</th>
+  </tr></thead><tbody>`;
+  rows.forEach((r,i)=>{
+    const pct = Math.round((r[4]/maxUnits)*100);
+    html+=`<tr>
+      <td><span class="rank ${i<3?'top':''}">${i+1}</span></td>
+      <td><strong>${r[1]}</strong></td>
+      <td>${catBadge(r[2])}</td>
+      <td class="money">${fmt(r[3])}</td>
+      <td>${r[4]} <div class="bar-mini" style="width:${pct}%"></div></td>
+      <td class="money c-green">${fmt(r[5])}</td>
+    </tr>`;
+  });
+  html+='</tbody></table>';
+  document.getElementById('topProductsTable').innerHTML=html;
+}
+
+function renderTopCustomers(){
+  const {rows} = query(QUERIES.top_customers);
+  const max = Math.max(...rows.map(r=>r[4]));
+  let html=`<table><thead><tr>
+    <th>#</th><th>Customer</th><th>City</th><th>Orders</th><th>Total Spent</th>
+  </tr></thead><tbody>`;
+  rows.forEach((r,i)=>{
+    const pct=Math.round((r[4]/max)*100);
+    html+=`<tr>
+      <td><span class="rank ${i<3?'top':''}">${i+1}</span></td>
+      <td><strong>${r[1]}</strong></td>
+      <td>${r[2]}</td>
+      <td>${r[3]}</td>
+      <td class="money c-green">${fmt(r[4])}<div class="bar-mini" style="width:${pct}%"></div></td>
+    </tr>`;
+  });
+  html+='</tbody></table>';
+  document.getElementById('topCustomersTable').innerHTML=html;
+}
+
+function renderInactive(){
+  const {rows} = query(QUERIES.inactive);
+  let html=`<table><thead><tr>
+    <th>ID</th><th>Customer</th><th>City</th><th>Last Order</th><th>Days Inactive</th>
+  </tr></thead><tbody>`;
+  rows.forEach(r=>{
+    const d = r[4]; const color = d>365?'c-pink':d>270?'c-orange':'c-yellow';
+    html+=`<tr>
+      <td class="money">${r[0]}</td>
+      <td><strong>${r[1]}</strong></td>
+      <td>${r[2]}</td>
+      <td class="money">${r[3]}</td>
+      <td><span class="money ${color}">⚠ ${d} days</span></td>
+    </tr>`;
+  });
+  html+='</tbody></table>';
+  document.getElementById('inactiveTable').innerHTML=html;
+}
+
+function renderCategory(){
+  const {rows} = query(QUERIES.category);
+  let html=`<table><thead><tr>
+    <th>Category</th><th>Products</th><th>Units Sold</th><th>Revenue</th><th>Share %</th>
+  </tr></thead><tbody>`;
+  rows.forEach(r=>{
+    html+=`<tr>
+      <td>${catBadge(r[0])}</td>
+      <td>${r[1]}</td>
+      <td>${r[2]}</td>
+      <td class="money c-green">${fmt(r[3])}</td>
+      <td><strong class="money">${r[4]}%</strong>
+        <div class="bar-mini" style="width:${Math.round(r[4])}%"></div></td>
+    </tr>`;
+  });
+  html+='</tbody></table>';
+  document.getElementById('categoryTable').innerHTML=html;
+}
+
+// ── CHARTS ────────────────────────────────────────────────
+function chartDefaults(){
+  return {
+    color:'rgba(226,232,240,1)',
+    plugins:{legend:{labels:{color:'#94a3b8',font:{family:"'JetBrains Mono',monospace",size:11}}}},
+    scales:{x:{ticks:{color:'#64748b',font:{family:"'JetBrains Mono',monospace",size:10}},grid:{color:'rgba(255,255,255,.05)'}},
+             y:{ticks:{color:'#64748b',font:{family:"'JetBrains Mono',monospace",size:10}},grid:{color:'rgba(255,255,255,.05)'}}}
+  };
+}
+
+function renderChartMonthly(){
+  const {rows} = query(QUERIES.monthly);
+  const labels = rows.map(r=>r[0]);
+  const data   = rows.map(r=>+(r[2]/1000).toFixed(1));
+  new Chart(document.getElementById('chartMonthly'),{
+    type:'bar',
+    data:{labels,datasets:[{
+      label:'Revenue (₹ thousands)',data,
+      backgroundColor:rows.map((_,i)=>`hsla(${230+i*5},70%,65%,.7)`),
+      borderColor:rows.map((_,i)=>`hsl(${230+i*5},70%,65%)`),
+      borderWidth:1,borderRadius:4
+    }]},
+    options:{...chartDefaults(),responsive:true,maintainAspectRatio:false,
+      plugins:{...chartDefaults().plugins,tooltip:{callbacks:{label:c=>'₹'+c.raw+'K'}}}}
+  });
+}
+
+function renderChartCategory(){
+  const {rows} = query(QUERIES.category);
+  const labels = rows.map(r=>r[0]);
+  const data   = rows.map(r=>+(r[3]/1000).toFixed(1));
+  const colors = labels.map(l=>CAT_COLORS[l]||'#6366f1');
+  new Chart(document.getElementById('chartCategory'),{
+    type:'doughnut',
+    data:{labels,datasets:[{data,backgroundColor:colors.map(c=>c+'cc'),borderColor:colors,borderWidth:2,hoverOffset:8}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'62%',
+      plugins:{legend:{position:'right',labels:{color:'#94a3b8',font:{family:"'JetBrains Mono',monospace",size:10},boxWidth:12,padding:12}},
+        tooltip:{callbacks:{label:c=>`${c.label}: ₹${c.raw}K`}}}}
+  });
+}
+
+function renderChartCity(){
+  const {rows} = query(QUERIES.city);
+  const top = rows.slice(0,8);
+  new Chart(document.getElementById('chartCity'),{
+    type:'bar',
+    data:{
+      labels:top.map(r=>r[0]),
+      datasets:[{
+        label:'Avg Order Value (₹)',
+        data:top.map(r=>r[2]),
+        backgroundColor:'rgba(34,211,238,.25)',
+        borderColor:'rgba(34,211,238,.8)',
+        borderWidth:2,borderRadius:6
+      }]
+    },
+    options:{
+      indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      ...chartDefaults(),
+      plugins:{...chartDefaults().plugins,tooltip:{callbacks:{label:c=>'₹'+c.raw.toLocaleString('en-IN')}}}
+    }
+  });
+}
+
+// ── SQL EXPLORER ──────────────────────────────────────────
+function loadQuery(){
+  const k = document.getElementById('querySelect').value;
+  const sql = QUERIES[k] || '';
+  document.getElementById('codeArea').textContent = sql;
+  document.getElementById('result-area').innerHTML = '';
+  document.getElementById('resultMeta').textContent = 'Click ▶ Run to execute';
+}
+
+function runQuery(){
+  const sql = document.getElementById('codeArea').textContent.trim();
+  if(!sql){return}
+  const t0 = performance.now();
+  try{
+    const {cols,rows} = query(sql);
+    const ms = (performance.now()-t0).toFixed(1);
+    if(!cols.length){
+      document.getElementById('result-area').innerHTML='<div style="padding:20px 24px;color:var(--muted);font-family:var(--font-mono);font-size:.8rem">Query executed successfully. No rows returned.</div>';
+      document.getElementById('resultMeta').textContent=`Executed in ${ms}ms`;
+      return;
+    }
+    let html=`<div class="tbl-wrap"><table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>`;
+    rows.forEach(r=>{
+      html+=`<tr>${r.map(v=>`<td>${v===null?'<span style="color:var(--muted)">NULL</span>':v}</td>`).join('')}</tr>`;
+    });
+    html+='</tbody></table></div>';
+    document.getElementById('result-area').innerHTML=html;
+    document.getElementById('resultMeta').textContent=`✓ ${rows.length} rows · ${ms}ms`;
+  }catch(e){
+    document.getElementById('result-area').innerHTML=`<div style="padding:20px 24px;color:var(--accent3);font-family:var(--font-mono);font-size:.8rem">❌ ${e.message}</div>`;
+    document.getElementById('resultMeta').textContent='Query failed';
+  }
+}
+
+// ── BOOT ─────────────────────────────────────────────────
+initDB().catch(e=>{
+  document.getElementById('lt').textContent='Error: '+e.message;
+  document.getElementById('lt').style.color='var(--accent3)';
+});
+</script>
+</body>
+</html>
